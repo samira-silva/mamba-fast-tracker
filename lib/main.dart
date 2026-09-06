@@ -5,7 +5,7 @@ import 'presentation/providers/auth_provider.dart';
 import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'services/notification_service.dart';
-import 'core/constants/app_colors.dart';
+import 'core/theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,17 +24,8 @@ class MambaFastTrackerApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Mamba Fast Tracker',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: AppColors.primary,
-          scaffoldBackgroundColor: AppColors.background,
-          brightness: Brightness.light,
-        ),
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: AppColors.primary,
-          brightness: Brightness.dark,
-        ),
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
         themeMode: ThemeMode.system,
         home: const _RootRouter(),
       ),
