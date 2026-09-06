@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/fasting_provider.dart';
 import '../providers/meal_provider.dart';
+import '../../data/models/fasting_protocol_model.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/date_utils.dart';
 
@@ -32,48 +33,39 @@ class _ProtocolPicker extends StatelessWidget {
   const _ProtocolPicker({required this.fasting});
 
   void _showCustomDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final hoursCtrl = TextEditingController();
     showDialog(
       context: context,
+      builder: (ctx) => _CustomProtocolDialog(fasting: fasting),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, FastingProtocolModel p) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Protocolo customizado'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome (ex: 20:4)'),
-            ),
-            TextField(
-              controller: hoursCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Horas de jejum',
-                helperText: 'Aceita decimal. Ex: 0.1 = 6 min (útil para teste)',
-              ),
-            ),
-          ],
-        ),
+        title: const Text('Excluir protocolo?'),
+        content: Text('Isso remove o protocolo "${p.name}" da sua lista. Jejuns já '
+            'registrados com ele continuam no histórico.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final hours = double.tryParse(hoursCtrl.text.replaceAll(',', '.')) ?? 0;
-              if (nameCtrl.text.isEmpty || hours <= 0 || hours >= 24) return;
-              await fasting.createCustomProtocol(nameCtrl.text, hours);
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Criar'),
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
     );
+    if (confirmed == true) {
+      await fasting.deleteCustomProtocol(p.id);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final predefined = fasting.protocols.where((p) => !p.isCustom).toList();
+    final custom = fasting.protocols.where((p) => p.isCustom).toList();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -86,20 +78,53 @@ class _ProtocolPicker extends StatelessWidget {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: fasting.protocols.map((p) {
-                return ActionChip(
-                  label: Text('${p.name}${p.isCustom ? ' •' : ''}'),
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                  onPressed: () => fasting.startFasting(p),
-                );
-              }).toList(),
+              children: predefined
+                  .map((p) => ActionChip(
+                        label: Text(p.name),
+                        onPressed: () => fasting.startFasting(p),
+                      ))
+                  .toList(),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () => _showCustomDialog(context),
               icon: const Icon(Icons.add),
               label: const Text('Criar protocolo customizado'),
             ),
+            if (custom.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text('Seus protocolos', style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 4),
+              ...custom.map((p) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Material(
+                      color: AppColors.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => fasting.startFasting(p),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.hourglass_empty, size: 18, color: AppColors.primary),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(p.name,
+                                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 20),
+                                color: AppColors.danger,
+                                onPressed: () => _confirmDelete(context, p),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  )),
+            ],
           ],
         ),
       ),
@@ -230,4 +255,93 @@ class _DailySummaryCard extends StatelessWidget {
           children: [Text(label), Text(value, style: const TextStyle(fontWeight: FontWeight.w600))],
         ),
       );
+}
+
+/// Diálogo de protocolo customizado. Em vez de pedir um número decimal de
+/// horas (confuso: "0.1" pra 6 minutos), usamos campos separados de horas
+/// e minutos, além de atalhos rápidos pra durações comuns e pra testes.
+class _CustomProtocolDialog extends StatefulWidget {
+  final FastingProvider fasting;
+  const _CustomProtocolDialog({required this.fasting});
+
+  @override
+  State<_CustomProtocolDialog> createState() => _CustomProtocolDialogState();
+}
+
+class _CustomProtocolDialogState extends State<_CustomProtocolDialog> {
+  final nameCtrl = TextEditingController();
+  double _hours = 14;
+  bool _nameEditedByUser = false;
+
+  String get _autoName => '${_hours.round()}:${24 - _hours.round()}';
+
+  @override
+  void initState() {
+    super.initState();
+    nameCtrl.text = _autoName;
+  }
+
+  void _onSliderChanged(double value) {
+    setState(() => _hours = value);
+    if (!_nameEditedByUser) {
+      nameCtrl.text = _autoName;
+    }
+  }
+
+  @override
+  void dispose() {
+    nameCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Novo protocolo'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Quantas horas de jejum?', style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              '${_hours.round()}h',
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Slider(
+            value: _hours,
+            min: 1,
+            max: 23,
+            divisions: 22,
+            label: '${_hours.round()}h',
+            onChanged: _onSliderChanged,
+          ),
+          Text(
+            'Isso deixa ${24 - _hours.round()}h para se alimentar por dia.',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: nameCtrl,
+            decoration: const InputDecoration(labelText: 'Nome do protocolo'),
+            onChanged: (_) => _nameEditedByUser = true,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: () async {
+            if (nameCtrl.text.isEmpty) return;
+            await widget.fasting.createCustomProtocol(nameCtrl.text, _hours);
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Criar'),
+        ),
+      ],
+    );
+  }
 }

@@ -125,8 +125,12 @@ class AppTheme {
         style: TextButton.styleFrom(foregroundColor: AppColors.primary),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-        labelStyle: const TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w600),
+        backgroundColor: AppColors.primary.withValues(alpha: isDark ? 0.22 : 0.1),
+        labelStyle: TextStyle(
+          color: isDark ? const Color(0xFFBFE8DB) : AppColors.primaryDark,
+          fontWeight: FontWeight.w600,
+        ),
+        deleteIconColor: isDark ? const Color(0xFFBFE8DB) : AppColors.primaryDark,
         side: BorderSide.none,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),

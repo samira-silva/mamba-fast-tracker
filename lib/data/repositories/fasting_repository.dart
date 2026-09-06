@@ -43,6 +43,10 @@ class FastingRepository {
     return protocol;
   }
 
+  Future<void> deleteCustomProtocol(String id) async {
+    await _protocolsBox!.delete(id);
+  }
+
   // ---------------- Sessões ----------------
 
   /// Retorna a sessão ativa (running ou paused), se houver.

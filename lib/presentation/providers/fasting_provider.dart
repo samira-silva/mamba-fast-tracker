@@ -102,6 +102,11 @@ class FastingProvider extends ChangeNotifier with WidgetsBindingObserver {
     return repository.createCustomProtocol(name, hours);
   }
 
+  Future<void> deleteCustomProtocol(String id) async {
+    await repository.deleteCustomProtocol(id);
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
