@@ -25,10 +25,18 @@ class NotificationService {
     await _plugin.initialize(settings);
 
     // Android 13+: pede permissão de notificação em runtime.
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.requestNotificationsPermission();
+
+    // Android 12+ (API 31+): a notificação de término do jejum é agendada
+    // com precisão exata (zonedSchedule + exactAllowWhileIdle), o que exige
+    // a permissão especial "Alarmes e lembretes". Sem pedir isso
+    // explicitamente aqui, o agendamento falha silenciosamente em telefones
+    // mais novos — foi exatamente o bug que encontramos testando no
+    // dispositivo real. Isso mostra o popup do sistema (ou leva direto pra
+    // tela de configuração do app, dependendo da versão do Android).
+    await androidPlugin?.requestExactAlarmsPermission();
   }
 
   Future<void> notifyFastingStarted(String protocolName) async {
@@ -57,6 +65,18 @@ class NotificationService {
     final scheduled = tz.TZDateTime.from(endTime, tz.local);
     if (scheduled.isBefore(tz.TZDateTime.now(tz.local))) return;
 
+    // Se o usuário não concedeu "Alarmes e lembretes", um agendamento
+    // "exact" falha silenciosamente no Android 12+. Nesse caso, caímos
+    // para "inexact" (o SO pode atrasar em minutos, mas ainda dispara) em
+    // vez de simplesmente não notificar o usuário.
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    final canScheduleExact =
+        await androidPlugin?.canScheduleExactNotifications() ?? false;
+    final mode = canScheduleExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
     await _plugin.zonedSchedule(
       1002,
       'Jejum concluído! 🎉',
@@ -72,7 +92,7 @@ class NotificationService {
         ),
         iOS: DarwinNotificationDetails(),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: mode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
